@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>網路防禦：資安大挑戰</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+        
+        /* 基礎樣式：營造終端機風格 */
+        body {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #0d1117; 
+            color: #00ff41; 
+            font-family: 'VT323', monospace;
+            overflow: hidden;
+            padding: 10px;
+        }
+
+        /* 主容器 */
+        .game-container {
+            border: 3px solid #00ff41;
+            box-shadow: 0 0 20px #00ff41, inset 0 0 10px #00ff4180;
+            background-color: #000000;
+            position: relative;
+            max-width: 95vw;
+            width: 900px;
+            height: 500px;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            padding: 10px;
+        }
+
+        /* 頂部資訊欄 */
+        .info-bar {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 10px;
+            font-size: 1.5rem;
+            border-bottom: 1px solid #00ff4150;
+            margin-bottom: 5px;
+        }
+
+        /* 畫布和介面層疊 */
+        .game-area {
+            position: relative;
+            width: 100%;
+            flex-grow: 1; /* 讓 Canvas 區域佔滿剩餘空間 */
+        }
+
+        #gameCanvas {
+            display: block;
+            background: linear-gradient(to bottom, #000000, #1a1a1a);
+            border-radius: 4px;
+            cursor: crosshair;
+        }
+
+        /* 遊戲介面 Overlay 樣式 */
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.95);
+            color: #00ff41;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            font-size: 2rem;
+            border-radius: 4px;
+            z-index: 20;
+        }
+
+        .overlay h1 {
+            font-size: 3rem;
+            text-shadow: 0 0 10px #00ff41;
+            margin-bottom: 10px;
+        }
+
+        .overlay p {
+            margin: 15px 0;
+            font-size: 1.5rem;
+        }
+        
+        .button-group button {
+            background-color: #00ff41;
+            color: #000000;
+            border: none;
+            padding: 10px 20px;
+            font-family: 'VT323', monospace;
+            font-size: 1.6rem;
+            cursor: pointer;
+            border-radius: 4px;
+            margin: 10px;
+            transition: all 0.1s ease-in-out;
+            box-shadow: 0 0 8px #00ff41;
+        }
+
+        .button-group button:hover {
+            background-color: #00cc33;
+            box-shadow: 0 0 12px #00ff41, 0 0 5px #00cc33;
+        }
+        
+        /* 退出按鈕特殊樣式 */
+        .button-group button.exit-button {
+            background-color: #ff3333;
+            color: #ffffff;
+            box-shadow: 0 0 8px #ff3333;
+        }
+
+        .button-group button.exit-button:hover {
+            background-color: #cc0000;
+            box-shadow: 0 0 12px #ff3333, 0 0 5px #cc0000;
+        }
+
+        /* 新增：臨時訊息框樣式 */
+        .message-box {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #00ff41;
+            color: #000000;
+            padding: 10px 20px;
+            border-radius: 4px;
+            font-size: 1.2rem;
+            box-shadow: 0 0 15px #00ff41;
+            opacity: 0;
+            transition: opacity 0.5s ease-out;
+            z-index: 30;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="game-container">
+        <div class="info-bar">
+            <span>挑戰級別: <span id="levelDisplay">初始化...</span></span>
+            <span>健康值 (Server HP): <span id="healthDisplay">250</span></span>
+            <span>防禦分數: <span id="scoreDisplay">0</span></span>
+        </div>
+        
+        <div class="game-area">
+            <!-- 遊戲開始/菜單畫面 -->
+            <div id="startOverlay" class="overlay">
+                <h1>網路防禦：資安大挑戰</h1>
+                <p>任務目標: 利用資安工具保護伺服器不被惡意封包攻陷。</p>
+                <p>點擊螢幕部署防禦!</p>
+                <div class="button-group">
+                    <button id="startButton">啟動防禦 (START)</button>
+                </div>
+            </div>
+
+            <!-- 關卡結束畫面 -->
+            <div id="levelEndOverlay" class="overlay" style="display: none;">
+                <h1>關卡 <span id="currentLevelEnd"></span> 防禦成功!</h1>
+                <p>威脅等級解除。得分: <span id="levelScoreDisplay">0</span></p>
+                <div class="button-group">
+                    <button id="continueButton">繼續遊戲 (NEXT LEVEL)</button>
+                    <button id="exitButton" class="exit-button">退出系統 (EXIT)</button>
+                </div>
+            </div>
+
+            <!-- 遊戲結束畫面 -->
+            <div id="gameOverOverlay" class="overlay" style="display: none;">
+                <h1>系統崩潰 (SYSTEM BREACH)</h1>
+                <p>所有伺服器被攻陷。最終得分: <span id="finalScoreDisplay">0</span></p>
+                <div class="button-group">
+                    <button id="restartGameButton">重新啟動 (REBOOT)</button>
+                    <button id="finalExitButton" class="exit-button">退出系統 (EXIT)</button>
+                </div>
+            </div>
+
+            <canvas id="gameCanvas"></canvas>
+            
+            <!-- 訊息提示框 -->
+            <div id="messageBox" class="message-box" style="display: none;"></div>
+        </div>
+    </div>
+
+    <script>
+        // === 全局變數及初始化 ===
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        const info = {
+            level: document.getElementById('levelDisplay'),
+            health: document.getElementById('healthDisplay'),
+            score: document.getElementById('scoreDisplay'),
+            start: document.getElementById('startOverlay'),
+            levelEnd: document.getElementById('levelEndOverlay'),
+            gameOver: document.getElementById('gameOverOverlay'),
+            currentLevelEnd: document.getElementById('currentLevelEnd'),
+            levelScore: document.getElementById('levelScoreDisplay'),
+            finalScore: document.getElementById('finalScoreDisplay'),
+            startButton: document.getElementById('startButton'),
+            continueButton: document.getElementById('continueButton'),
+            exitButton: document.getElementById('exitButton'),
+            restartGameButton: document.getElementById('restartGameButton'),
+            finalExitButton: document.getElementById('finalExitButton'),
+            messageBox: document.getElementById('messageBox') // 新增訊息框引用
+        };
+
+        // 遊戲狀態機
+        let gameState = 'MENU'; // MENU, LEVEL_1, LEVEL_2, LEVEL_3, LEVEL_END, GAME_OVER
+        let currentLevel = 0;
+        let score = 0;
+        let health = 250;
+        let enemies = [];
+        let defenses = [];
+        let gameFrame = 0;
+        let enemyTimer = 0;
+        let levelDuration = 0;
+        let gameRunning = false;
+        
+        // 伺服器核心位置 (目標)
+        const core = {
+            x: 50,
+            y: canvas.height / 2,
+            radius: 20
+        };
+        
+        // 威脅和防禦配置
+        const CONFIG = {
+            // 所有威脅都會嘗試到達 CORE
+            CORE_X: 50,
+            
+            // 關卡配置
+            LEVELS: [
+                { 
+                    name: '網路釣魚防禦', 
+                    duration: 1500, // 幀數
+                    speed: 1.5,
+                    healthCost: 5,
+                    enemyType: 'PHISHING_EMAIL',
+                    defenseType: 'SPAM_FILTER', // 點擊型防禦 (點擊威脅)
+                    spawnRate: 90 // 幀數間隔
+                },
+                { 
+                    name: 'DDoS 流量管制', 
+                    duration: 2000, 
+                    speed: 3.5, // 更快
+                    healthCost: 1, // 傷害低但數量多
+                    enemyType: 'BOT_PACKET',
+                    defenseType: 'FIREWALL_RULE', // 放置型防禦 (點擊畫布一次)
+                    spawnRate: 30
+                },
+                { 
+                    name: '零時差攻擊阻斷', 
+                    duration: 1800, 
+                    speed: 1.2, // 略為增加速度
+                    healthCost: 20,
+                    enemyType: 'ZERO_DAY',
+                    defenseType: 'ENDPOINT_DETECTION', // 點擊型防禦 (點擊威脅)
+                    spawnRate: 450 // 減少生成數量 (原300)
+                },
+                { 
+                    name: '惡意軟體感染防禦', 
+                    duration: 2000, 
+                    speed: 1.0, // 降低速度
+                    healthCost: 10,
+                    enemyType: 'MALWARE',
+                    defenseType: 'ANTIVIRUS_SCAN', // 點擊型防禦 (點擊威脅)
+                    spawnRate: 60
+                },
+                { 
+                    name: '進階病毒陷阱阻斷', 
+                    duration: 2500, 
+                    speed: 2.0, // 降低速度
+                    healthCost: 15,
+                    enemyType: 'ADVANCED_THREAT',
+                    defenseType: 'FIREWALL_RULE', // 放置型防禦，像第2關
+                    spawnRate: 45
+                }
+            ]
+        };
+
+        // === 繪製函數 (Draw Functions) ===
+
+        // 繪製伺服器核心
+        function drawCore() {
+            ctx.beginPath();
+            ctx.arc(core.x, core.y, core.radius, 0, Math.PI * 2);
+            ctx.fillStyle = health > 75 ? '#00ccff' : '#ff0000'; // 藍色正常，紅色警告
+            ctx.shadowColor = ctx.fillStyle;
+            ctx.shadowBlur = 10;
+            ctx.fill();
+            ctx.shadowBlur = 0; // 重置陰影
+
+            ctx.fillStyle = '#000000';
+            ctx.font = '12px VT323';
+            ctx.textAlign = 'center';
+            ctx.fillText('SERVER', core.x, core.y + 4);
+        }
+
+        // 繪製威脅
+        function drawEnemy(enemy) {
+            ctx.fillStyle = enemy.color;
+            ctx.shadowColor = enemy.color;
+            ctx.shadowBlur = 5;
+            ctx.font = '16px VT323';
+
+            switch (enemy.type) {
+                case 'PHISHING_EMAIL':
+                    // 繪製信封或釣魚符號 (Email/Phishing)
+                    ctx.fillText('📧', enemy.x - 8, enemy.y + 5);
+                    break;
+                case 'BOT_PACKET':
+                    // 繪製小型方塊 (DDoS Bot)
+                    ctx.fillRect(enemy.x - 5, enemy.y - 5, 10, 10);
+                    break;
+                case 'ZERO_DAY':
+                    // 繪製X型或危險符號
+                    ctx.fillText('☢️', enemy.x - 8, enemy.y + 5);
+                    break;
+                case 'MALWARE':
+                case 'ADVANCED_THREAT':
+                    // 繪製惡意軟體符號
+                    ctx.fillText('💻', enemy.x - 8, enemy.y + 5);
+                    break;
+                case 'VIRUS_TRAP':
+                    // 繪製病毒陷阱符號 (不同以區分)
+                    ctx.fillText('🦠', enemy.x - 8, enemy.y + 5);
+                    break;
+            }
+            ctx.shadowBlur = 0;
+        }
+
+        // 繪製防禦
+        function drawDefense(defense) {
+            ctx.fillStyle = defense.color;
+            ctx.shadowColor = defense.color;
+            ctx.shadowBlur = 8;
+            ctx.font = '18px VT323';
+            
+            switch (defense.type) {
+                case 'SPAM_FILTER':
+                case 'ENDPOINT_DETECTION':
+                case 'ANTIVIRUS_SCAN':
+                case 'INTRUSION_PREVENTION':
+                    // 點擊後消失，不需要持續繪製
+                    break;
+                case 'FIREWALL_RULE':
+                    // 繪製矩形防火牆屏障
+                    ctx.fillRect(defense.x, defense.y, defense.width, defense.height);
+                    ctx.fillStyle = '#000000';
+                    ctx.fillText('FW', defense.x + 5, defense.y + defense.height / 2 + 5);
+                    break;
+            }
+            ctx.shadowBlur = 0;
+        }
+        
+        // 繪製二進位背景 (靜態/微動態)
+        function drawBackground() {
+            ctx.fillStyle = 'rgba(0, 255, 65, 0.05)';
+            ctx.font = '12px VT323';
+
+            // 簡單模擬數據流
+            for (let i = 0; i < canvas.width / 20; i++) {
+                for (let j = 0; j < canvas.height / 20; j++) {
+                    const char = (i + j + Math.floor(gameFrame / 10)) % 2 === 0 ? '1' : '0';
+                    ctx.fillText(char, i * 20 + 5, j * 20 + 10);
+                }
+            }
+        }
+
+        // === 邏輯函數 (Logic Functions) ===
+
+        // 顯示臨時訊息框
+        function showMessage(text) {
+            const box = info.messageBox;
+            box.textContent = text;
+            box.style.display = 'block';
+            // 確保 opacity 從 0 開始變化
+            requestAnimationFrame(() => {
+                box.style.opacity = '1';
+            });
+
+            // 3 秒後淡出並隱藏
+            setTimeout(() => {
+                box.style.opacity = '0';
+                setTimeout(() => {
+                    box.style.display = 'none';
+                }, 500); // 等待過渡完成
+            }, 3000);
+        }
+
+        function resizeCanvas() {
+            const container = canvas.closest('.game-area');
+            if (container) {
+                canvas.width = container.clientWidth;
+                canvas.height = container.clientHeight;
+                core.y = canvas.height / 2;
+                // 重置防禦位置以適應新尺寸 (特別是 FIREWALL_RULE)
+                defenses = defenses.map(d => {
+                    if (d.type === 'FIREWALL_RULE') {
+                        d.x = canvas.width / 2;
+                        d.y = 0;
+                        d.height = canvas.height;
+                    }
+                    return d;
+                });
+            }
+        }
+        
+        function updateUI() {
+            info.level.textContent = `LEVEL ${currentLevel} (${CONFIG.LEVELS[currentLevel - 1]?.name || 'N/A'})`;
+            info.health.textContent = health;
+            info.score.textContent = score;
+            
+            // 根據生命值改變顏色
+            if (health < 75) {
+                info.health.style.color = '#ff3333';
+            } else if (health < 150) {
+                info.health.style.color = '#ffcc00';
+            } else {
+                info.health.style.color = '#00ff41';
+            }
+        }
+
+        function resetGame() {
+            currentLevel = 0;
+            score = 0;
+            health = 250;
+            gameFrame = 0;
+            enemies = [];
+            defenses = [];
+        }
+
+        function startGame() {
+            resetGame();
+            gameRunning = true; 
+            goToNextLevel();
+        }
+
+        function goToNextLevel() {
+            currentLevel++;
+            enemies = [];
+            defenses = [];
+            gameFrame = 0;
+
+            if (currentLevel > CONFIG.LEVELS.length) {
+                // 遊戲勝利
+                showLevelEndScreen();
+                info.currentLevelEnd.textContent = `5 / 最終`;
+                info.levelScore.textContent = score;
+                info.continueButton.style.display = 'none'; 
+                info.levelEnd.querySelector('h1').textContent = "最終挑戰 防禦成功！";
+                return;
+            }
+
+            gameState = `LEVEL_${currentLevel}`;
+            gameRunning = true; 
+            updateUI();
+            hideAllOverlays();
+            
+            // 關卡特定提示
+            if (currentLevel === 2 || currentLevel === 5) {
+                showMessage("L" + currentLevel + " 啟動: 點擊畫布'一次'部署防火牆 (Firewall)。防火牆有血量限制!");
+            } else if (currentLevel >= 4) {
+                showMessage("L" + currentLevel + " 啟動: 點擊惡意威脅將其銷毀! 但小心病毒陷阱(🦠)，點擊會扣血!");
+            } else {
+                showMessage("L" + currentLevel + " 啟動: 點擊惡意威脅將其銷毀!");
+            }
+
+            // 啟動遊戲循環
+            gameLoop();
+        }
+
+        function showLevelEndScreen() {
+            gameState = 'LEVEL_END';
+            gameRunning = false; 
+            info.currentLevelEnd.textContent = currentLevel;
+            info.levelScore.textContent = score;
+            info.continueButton.style.display = (currentLevel < CONFIG.LEVELS.length) ? 'inline-block' : 'none'; 
+            info.levelEnd.style.display = 'flex';
+        }
+
+        function gameOver(win = false) {
+            gameState = 'GAME_OVER';
+            gameRunning = false; 
+            hideAllOverlays();
+            info.finalScore.textContent = score;
+            info.gameOver.style.display = 'flex';
+            info.gameOver.querySelector('h1').textContent = "系統崩潰 (SYSTEM BREACH)";
+            info.gameOver.querySelector('p').textContent = `所有伺服器被攻陷。最終得分: ${score}`;
+        }
+        
+        function hideAllOverlays() {
+            info.start.style.display = 'none';
+            info.levelEnd.style.display = 'none';
+            info.gameOver.style.display = 'none';
+        }
+
+        // 生成敵人
+        function spawnEnemy() {
+            const currentConfig = CONFIG.LEVELS[currentLevel - 1];
+            if (!currentConfig) return;
+
+            let enemyType = currentConfig.enemyType;
+            let color = (currentLevel === 3 ? '#ff0000' : (currentConfig.enemyType === 'ZERO_DAY' ? '#ff3333' : '#ffcc00'));
+            let healthCost = currentConfig.healthCost;
+
+            // 第4、5關隨機生成病毒陷阱 (30%機率)
+            if (currentLevel >= 4 && Math.random() < 0.3) {
+                enemyType = 'VIRUS_TRAP';
+                color = '#ff00ff'; // 紫色以區分
+                healthCost = (currentLevel === 4 ? 0 : 15); // 第4關不點擊不扣血，到達核心也不扣
+            }
+
+            const enemy = {
+                x: canvas.width,
+                y: Math.random() * (canvas.height - 40) + 20,
+                type: enemyType,
+                speed: currentConfig.speed,
+                healthCost: healthCost,
+                isAlive: true,
+                color: color,
+                width: 20, // 簡易碰撞用
+                height: 20  // 簡易碰撞用
+            };
+            enemies.push(enemy);
+        }
+
+        // 更新敵人狀態
+        function updateEnemies() {
+            const currentConfig = CONFIG.LEVELS[currentLevel - 1];
+
+            // 檢查是否達到時間限制
+            if (gameFrame > currentConfig.duration) {
+                showLevelEndScreen();
+                return;
+            }
+
+            // 生成新的敵人
+            if (gameFrame % currentConfig.spawnRate === 0) {
+                spawnEnemy();
+            }
+
+            // 移動敵人並檢查核心碰撞
+            enemies.forEach(enemy => {
+                if (!enemy.isAlive) return;
+                
+                // 朝著 CORE_X 移動
+                enemy.x -= enemy.speed;
+
+                // 核心碰撞檢測
+                if (enemy.x <= core.x + core.radius) {
+                    health -= enemy.healthCost;
+                    enemy.isAlive = false; // 移除已造成傷害的敵人
+                    if (health <= 0) {
+                        gameOver();
+                    }
+                }
+            });
+
+            enemies = enemies.filter(e => e.isAlive && e.x > 0);
+        }
+
+        // 處理玩家點擊防禦
+        function deployDefense(e) {
+            if (!gameRunning) return; 
+
+            const rect = canvas.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
+
+            const currentConfig = CONFIG.LEVELS[currentLevel - 1];
+            
+            if (currentConfig.defenseType !== 'FIREWALL_RULE') {
+                // 點擊型防禦: 嘗試銷毀點擊位置附近的敵人
+                let enemiesDestroyed = 0;
+                enemies.forEach(enemy => {
+                    // 檢查是否在點擊範圍內 (20px)
+                    if (Math.abs(enemy.x - clickX) < 20 && Math.abs(enemy.y - clickY) < 20) {
+                        if (enemy.type === 'VIRUS_TRAP') {
+                            // 點擊病毒陷阱: 扣血但銷毀
+                            health -= 10;
+                            if (health <= 0) {
+                                gameOver();
+                            }
+                            showMessage("警告! 點擊病毒陷阱造成損害!");
+                            enemy.isAlive = false;
+                            score += 5; // 少量加分
+                        } else {
+                            enemy.isAlive = false;
+                            score += 10; // 正常加分
+                        }
+                        enemiesDestroyed++;
+                    }
+                });
+                
+                // 點擊後顯示一個短暫的防禦效果
+                if (enemiesDestroyed > 0) {
+                    // 模擬防禦效果，例如一個綠色閃光
+                    const flash = { x: clickX, y: clickY, radius: 0, maxRadius: 50, life: 30, color: '#00ff41' };
+                    defenses.push(flash);
+                } else {
+                     // 點擊落空，給予提示
+                     const missFlash = { x: clickX, y: clickY, radius: 0, maxRadius: 20, life: 15, color: '#ffcc00' };
+                     defenses.push(missFlash);
+                }
+
+            } else if (currentConfig.defenseType === 'FIREWALL_RULE') {
+                // 放置型防禦 (Level 2 & 5: DDoS) - 只允許放置一次
+                if (defenses.length === 0) {
+                    const firewall = {
+                        type: 'FIREWALL_RULE',
+                        x: canvas.width / 2, // 固定在中間
+                        y: 0,
+                        width: 15,
+                        height: canvas.height,
+                        color: '#0066ff', // 藍色防火牆
+                        hp: (currentLevel === 5 ? 200 : Infinity) // 第5關提高血量
+                    };
+                    defenses.push(firewall);
+                    showMessage("防火牆部署成功！");
+                } else {
+                    showMessage("防火牆已部署，無需重複操作！");
+                }
+            }
+        }
+        
+        // 更新防禦狀態 (主要用於放置型防禦或點擊閃光)
+        function updateDefenses() {
+            // Firewall 防禦邏輯
+            let firewallIndex = defenses.findIndex(d => d.type === 'FIREWALL_RULE');
+            if (firewallIndex !== -1) {
+                const firewall = defenses[firewallIndex];
+                enemies.forEach(enemy => {
+                    if (enemy.isAlive && enemy.x <= firewall.x + firewall.width && enemy.x >= firewall.x) {
+                        // 敵人碰到防火牆
+                        if (firewall.hp > 0) {
+                            // 扣除防火牆血量
+                            firewall.hp -= enemy.healthCost;
+                            enemy.isAlive = false;
+                            score += 5; // 成功防禦加分
+                            if (firewall.hp <= 0) {
+                                // 防火牆毀損，移除
+                                defenses.splice(firewallIndex, 1);
+                                showMessage("防火牆已毀損！");
+                            }
+                        } else {
+                            // 如果防火牆已毀，敵人繼續前進
+                        }
+                    }
+                });
+            }
+
+            // 處理點擊閃光效果的生命週期
+            defenses = defenses.filter(d => {
+                if (d.life && d.type !== 'FIREWALL_RULE') {
+                    d.life--;
+                    d.radius += 2;
+                    return d.life > 0;
+                }
+                return true; // 保留非閃光型的防禦
+            });
+        }
+        
+        // 遊戲主循環
+        function gameLoop() {
+            if (gameState === 'MENU' || gameState === 'LEVEL_END' || gameState === 'GAME_OVER' || !gameRunning) return;
+
+            // 1. 清除畫面
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 2. 繪製背景和核心
+            drawBackground();
+            drawCore();
+            
+            // 3. 更新邏輯
+            gameFrame++;
+            updateEnemies();
+            updateDefenses();
+
+            // 4. 繪製
+            defenses.forEach(d => {
+                if (d.life && d.type !== 'FIREWALL_RULE') {
+                     // 繪製閃光效果
+                    ctx.beginPath();
+                    ctx.arc(d.x, d.y, d.radius, 0, Math.PI * 2);
+                    // 根據顏色參數繪製閃光
+                    ctx.fillStyle = d.color.startsWith('#') ? `${d.color}50` : d.color; // 使用半透明顏色
+                    ctx.fill();
+                } else {
+                    drawDefense(d);
+                }
+            });
+            enemies.forEach(drawEnemy);
+
+            // 5. 更新資訊欄
+            updateUI();
+
+            // 6. 循環
+            requestAnimationFrame(gameLoop);
+        }
+
+        // === 事件監聽器及啟動 ===
+
+        function setupListeners() {
+            info.startButton.addEventListener('click', startGame);
+            info.continueButton.addEventListener('click', goToNextLevel);
+            info.restartGameButton.addEventListener('click', startGame);
+            
+            // 退出按鈕功能：在 iframe 環境下通常無法直接關閉窗口，這裡我們重置到菜單畫面
+            const exitAction = () => {
+                gameState = 'MENU';
+                gameRunning = false; 
+                hideAllOverlays();
+                info.start.style.display = 'flex';
+            };
+            info.exitButton.addEventListener('click', exitAction);
+            info.finalExitButton.addEventListener('click', exitAction);
+            
+            // 點擊部署防禦
+            canvas.addEventListener('click', deployDefense);
+            
+            // 視窗大小改變
+            window.addEventListener('resize', resizeCanvas);
+        }
+
+        // 初始設置
+        window.onload = () => {
+            setupListeners();
+            resizeCanvas();
+            // 初始狀態為 MENU，只顯示開始畫面
+            info.start.style.display = 'flex';
+        };
+
+    </script>
+</body>
+</html>
